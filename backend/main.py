@@ -1,7 +1,7 @@
 import os
 import fitz  # PyMuPDF
 import subprocess
-import copy  # Dùng để sao chép chuẩn XML của hàng mẫu
+import copy
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -41,42 +41,59 @@ def process_attendance(data: AttendanceRequest):
         doc = Document(template_path)
         num_absent = len(data.absent_students)
 
-        # 1. Tính toán khoảng trống lề trên động giúp bảng luôn ở giữa trang
-        top_padding_pt = max(20, 150 - (num_absent * 12))
+        # 1. Ép cố định lề trang (Margins = 0.5 inch = 36pt) để cân bằng trang giấy A4 ngang (595pt)
+        section = doc.sections[0]
+        section.top_margin = Pt(36)
+        section.bottom_margin = Pt(36)
+        section.left_margin = Pt(36)
+        section.right_margin = Pt(36)
+
+        # 2. Công thức tính toán chính xác khoảng lề trên để toàn bộ khối nội dung nằm giữa trang
+        top_space_pt = max(10, int(215 - (12 * num_absent)))
 
         for p in doc.paragraphs:
             if "Danh Sách Các Bạn Vắng Mặt" in p.text:
-                p.paragraph_format.space_before = Pt(top_padding_pt)
+                p.paragraph_format.space_before = Pt(top_space_pt)
+                p.paragraph_format.space_after = Pt(4)
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 for run in p.runs:
                     run.font.name = "Mulish"
 
             elif "Ngày dd/mm" in p.text:
                 p.text = f"Ngày {data.date_str}"
+                p.paragraph_format.space_before = Pt(0)
+                p.paragraph_format.space_after = Pt(16)
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 for run in p.runs:
                     run.font.name = "Mulish"
 
-        # 2. Xử lý Bảng điểm danh
+        # 3. Xử lý Bảng điểm danh
         if doc.tables:
             table = doc.tables[0]
             table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
             existing_data_rows = len(table.rows) - 1  # Trừ hàng tiêu đề
 
-            # Trường hợp 1: Số vắng NHIỀU HƠN số hàng mẫu -> Nhân bản hàng mẫu (Index 1)
+            # Thêm hoặc xóa hàng để vừa đúng số lượng học sinh vắng
             if num_absent > existing_data_rows:
                 template_tr = table.rows[1]._tr
                 for _ in range(num_absent - existing_data_rows):
                     new_tr = copy.deepcopy(template_tr)
                     table._tbl.append(new_tr)
-
-            # Trường hợp 2: Số vắng ÍT HƠN số hàng mẫu -> Xóa bớt hàng thừa từ cuối
             elif num_absent < existing_data_rows:
                 while len(table.rows) - 1 > num_absent:
                     table._tbl.remove(table.rows[-1]._tr)
 
-            # Điền dữ liệu và áp dụng định dạng đệm + font chuẩn cho TẤT CẢ các hàng
+            # Định dạng lại hàng tiêu đề (Hàng 0)
+            for cell in table.rows[0].cells:
+                p = cell.paragraphs[0]
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                p.paragraph_format.space_before = Pt(6)
+                p.paragraph_format.space_after = Pt(6)
+                for run in p.runs:
+                    run.font.name = "Mulish"
+
+            # Điền dữ liệu và định dạng hàng dữ liệu (Hàng 1 -> N)
             for index, student in enumerate(data.absent_students, start=1):
                 row = table.rows[index]
                 cell_values = [
@@ -87,17 +104,17 @@ def process_attendance(data: AttendanceRequest):
 
                 for col_idx, text_val in enumerate(cell_values):
                     cell = row.cells[col_idx]
-                    cell.text = ""  # Xóa text mặc định
+                    cell.text = ""
                     p = cell.paragraphs[0]
                     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     
-                    # Tạo khoảng đệm trên/dưới (padding) đồng nhất 8pt cho tất cả các hàng
-                    p.paragraph_format.space_before = Pt(8)
-                    p.paragraph_format.space_after = Pt(8)
+                    # Khoảng đệm đều 6pt trên/dưới mỗi dòng
+                    p.paragraph_format.space_before = Pt(6)
+                    p.paragraph_format.space_after = Pt(6)
                     
                     run = p.add_run(text_val)
                     run.font.name = "Mulish"
-                    run.font.size = Pt(12)  # Cỡ chữ 12pt đồng nhất
+                    run.font.size = Pt(12)
 
         # Lưu tệp docx tạm thời
         output_docx = f"/tmp/output_{data.date_full}.docx"
@@ -107,16 +124,16 @@ def process_attendance(data: AttendanceRequest):
 
         doc.save(output_docx)
 
-        # 3. Chuyển đổi DOCX -> PDF
+        # 4. Chuyển đổi sang PDF
         subprocess.run([
             "soffice", "--headless", "--convert-to", "pdf",
             output_docx, "--outdir", output_pdf_dir
         ], check=True)
 
-        # 4. Chuyển đổi PDF -> PNG
+        # 5. Chuyển đổi PDF sang PNG
         pdf_doc = fitz.open(output_pdf)
         page = pdf_doc[0]
-        pix = page.get_pixmap(dpi=600)  # Chất lượng cao
+        pix = page.get_pixmap(dpi=600)
         pix.save(output_png)
         pdf_doc.close()
 
