@@ -1,7 +1,4 @@
-import os
-import fitz  # PyMuPDF
-import subprocess
-import copy
+import os, fitz, copy, subprocess
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -41,20 +38,35 @@ def process_attendance(data: AttendanceRequest):
         doc = Document(template_path)
         num_absent = len(data.absent_students)
 
-        # 1. Ép cố định lề trang (Margins = 0.5 inch = 36pt) để cân bằng trang giấy A4 ngang (595pt)
+        # 1. Giữ nguyên khổ giấy A5 từ Sample.docx & đặt lề mỏng gọn (20pt ~ 0.7cm)
         section = doc.sections[0]
-        section.top_margin = Pt(36)
-        section.bottom_margin = Pt(36)
-        section.left_margin = Pt(36)
-        section.right_margin = Pt(36)
+        section.top_margin = Pt(20)
+        section.bottom_margin = Pt(20)
+        section.left_margin = Pt(25)
+        section.right_margin = Pt(25)
 
-        # 2. Công thức tính toán chính xác khoảng lề trên để toàn bộ khối nội dung nằm giữa trang
-        top_space_pt = max(10, int(215 - (12 * num_absent)))
+        # Đọc chiều cao trang A5 thực tế từ file mẫu (khoảng 420pt nếu A5 Ngang)
+        page_height_pt = section.page_height.pt if section.page_height else 420.0
+        usable_height = page_height_pt - 40.0  # Trừ 20pt lề trên và 20pt lề dưới
 
+        # 2. Điều chỉnh độ dày hàng linh hoạt theo số học sinh vắng
+        if num_absent <= 5:
+            row_padding_pt = 6
+        elif num_absent <= 10:
+            row_padding_pt = 4
+        else:
+            row_padding_pt = 2
+
+        # 3. Tính toán chính xác khoảng lề trên để toàn bộ khối nằm CHÍNH GIỮA trang A5
+        row_height = 14 + (2 * row_padding_pt)
+        total_content_height = 65 + 25 + (num_absent * row_height)
+        top_space_pt = max(10, int((usable_height - total_content_height) / 2))
+
+        # Áp dụng căn giữa tiêu đề
         for p in doc.paragraphs:
             if "Danh Sách Các Bạn Vắng Mặt" in p.text:
                 p.paragraph_format.space_before = Pt(top_space_pt)
-                p.paragraph_format.space_after = Pt(4)
+                p.paragraph_format.space_after = Pt(2)
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 for run in p.runs:
                     run.font.name = "Mulish"
@@ -62,19 +74,19 @@ def process_attendance(data: AttendanceRequest):
             elif "Ngày dd/mm" in p.text:
                 p.text = f"Ngày {data.date_str}"
                 p.paragraph_format.space_before = Pt(0)
-                p.paragraph_format.space_after = Pt(16)
+                p.paragraph_format.space_after = Pt(10)
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 for run in p.runs:
                     run.font.name = "Mulish"
 
-        # 3. Xử lý Bảng điểm danh
+        # 4. Xử lý Bảng điểm danh
         if doc.tables:
             table = doc.tables[0]
             table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
-            existing_data_rows = len(table.rows) - 1  # Trừ hàng tiêu đề
+            existing_data_rows = len(table.rows) - 1
 
-            # Thêm hoặc xóa hàng để vừa đúng số lượng học sinh vắng
+            # Thêm hoặc xóa hàng cho vừa số học sinh vắng
             if num_absent > existing_data_rows:
                 template_tr = table.rows[1]._tr
                 for _ in range(num_absent - existing_data_rows):
@@ -84,16 +96,16 @@ def process_attendance(data: AttendanceRequest):
                 while len(table.rows) - 1 > num_absent:
                     table._tbl.remove(table.rows[-1]._tr)
 
-            # Định dạng lại hàng tiêu đề (Hàng 0)
+            # Định dạng hàng tiêu đề bảng
             for cell in table.rows[0].cells:
                 p = cell.paragraphs[0]
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-                p.paragraph_format.space_before = Pt(6)
-                p.paragraph_format.space_after = Pt(6)
+                p.paragraph_format.space_before = Pt(4)
+                p.paragraph_format.space_after = Pt(4)
                 for run in p.runs:
                     run.font.name = "Mulish"
 
-            # Điền dữ liệu và định dạng hàng dữ liệu (Hàng 1 -> N)
+            # Điền dữ liệu học sinh vắng
             for index, student in enumerate(data.absent_students, start=1):
                 row = table.rows[index]
                 cell_values = [
@@ -108,13 +120,12 @@ def process_attendance(data: AttendanceRequest):
                     p = cell.paragraphs[0]
                     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     
-                    # Khoảng đệm đều 6pt trên/dưới mỗi dòng
-                    p.paragraph_format.space_before = Pt(6)
-                    p.paragraph_format.space_after = Pt(6)
+                    p.paragraph_format.space_before = Pt(row_padding_pt)
+                    p.paragraph_format.space_after = Pt(row_padding_pt)
                     
                     run = p.add_run(text_val)
                     run.font.name = "Mulish"
-                    run.font.size = Pt(12)
+                    run.font.size = Pt(11)
 
         # Lưu tệp docx tạm thời
         output_docx = f"/tmp/output_{data.date_full}.docx"
@@ -124,13 +135,13 @@ def process_attendance(data: AttendanceRequest):
 
         doc.save(output_docx)
 
-        # 4. Chuyển đổi sang PDF
+        # 5. Chuyển đổi sang PDF bằng LibreOffice
         subprocess.run([
             "soffice", "--headless", "--convert-to", "pdf",
             output_docx, "--outdir", output_pdf_dir
         ], check=True)
 
-        # 5. Chuyển đổi PDF sang PNG
+        # 6. Chuyển đổi PDF sang PNG bằng PyMuPDF
         pdf_doc = fitz.open(output_pdf)
         page = pdf_doc[0]
         pix = page.get_pixmap(dpi=600)
