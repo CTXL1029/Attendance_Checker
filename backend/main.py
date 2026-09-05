@@ -6,7 +6,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from docx import Document
-from docx.enum.text import WD_ALIGN_PARAGRAPH  # Import module hỗ trợ căn lề
+from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.enum.table import WD_TABLE_ALIGNMENT  # Bổ sung căn giữa cho Bảng
+from docx.shared import Pt                       # Bổ sung căn khoảng cách pt
 
 app = FastAPI()
 
@@ -36,26 +38,36 @@ def process_attendance(data: AttendanceRequest):
             raise HTTPException(status_code=500, detail="Thiếu tệp mẫu Sample.docx")
 
         doc = Document(template_path)
+        num_absent = len(data.absent_students)
 
-        # 1. Cập nhật ngày xử lý (Giữ căn giữa & Font Mulish)
+        # 1. Tính toán khoảng trống lề trên động (để thay thế căn giữa dọc của Word)
+        # Trang ngang A4 có chiều cao ~595pt. Tùy số lượng học sinh vắng để đẩy tiêu đề xuống giữa trang.
+        top_padding_pt = max(30, 160 - (num_absent * 15))
+
         for p in doc.paragraphs:
-            if "Ngày dd/mm" in p.text:
+            if "Danh Sách Các Bạn Vắng Mặt" in p.text:
+                p.paragraph_format.space_before = Pt(top_padding_pt)
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for run in p.runs:
+                    run.font.name = "Mulish"
+
+            elif "Ngày dd/mm" in p.text:
                 p.text = f"Ngày {data.date_str}"
                 p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                 for run in p.runs:
                     run.font.name = "Mulish"
 
-        # 2. Xử lý Bảng điểm danh
+        # 2. Xử lý Bảng và Ép căn giữa khung bảng
         if doc.tables:
             table = doc.tables[0]
-            num_absent = len(data.absent_students)
+            
+            # Bắt buộc căn giữa khung bảng theo chiều ngang trang giấy
+            table.alignment = WD_TABLE_ALIGNMENT.CENTER
 
-            # Xóa các hàng trống thừa còn dư từ file Sample.docx
-            # (Hàng 0 là tiêu đề, các hàng từ index 1 trở đi là dữ liệu)
+            # Xóa các hàng mẫu còn thừa từ Sample.docx
             while len(table.rows) - 1 > num_absent:
                 row_to_remove = table.rows[-1]
-                tr = row_to_remove._tr
-                table._tbl.remove(tr)
+                table._tbl.remove(row_to_remove._tr)
 
             # Điền dữ liệu học sinh vắng
             for index, student in enumerate(data.absent_students, start=1):
@@ -70,15 +82,15 @@ def process_attendance(data: AttendanceRequest):
                     "Nghỉ có phép" if student.permission else ""
                 ]
 
-                # Ghi dữ liệu vào từng ô và ép căn giữa + Font Mulish
+                # Điền nội dung + Ép căn giữa chữ + Ép Font Mulish cho từng ô
                 for col_idx, text_val in enumerate(cell_values):
                     cell = row.cells[col_idx]
-                    cell.text = ""  # Xóa text mặc định
+                    cell.text = ""
                     p = cell.paragraphs[0]
-                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER  # Ép căn giữa ô
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER
                     
                     run = p.add_run(text_val)
-                    run.font.name = "Mulish"                  # Ép font Mulish
+                    run.font.name = "Mulish"
 
         # Lưu tệp docx tạm thời
         output_docx = f"/tmp/output_{data.date_full}.docx"
@@ -88,13 +100,13 @@ def process_attendance(data: AttendanceRequest):
 
         doc.save(output_docx)
 
-        # 3. Chuyển đổi DOCX -> PDF bằng LibreOffice
+        # 3. Chuyển đổi DOCX -> PDF
         subprocess.run([
             "soffice", "--headless", "--convert-to", "pdf",
             output_docx, "--outdir", output_pdf_dir
         ], check=True)
 
-        # 4. Chuyển đổi PDF -> PNG bằng PyMuPDF
+        # 4. Chuyển đổi PDF -> PNG
         pdf_doc = fitz.open(output_pdf)
         page = pdf_doc[0]
         pix = page.get_pixmap(dpi=600)
