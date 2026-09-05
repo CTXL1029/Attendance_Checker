@@ -18,6 +18,12 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# === Bổ sung Endpoint cho Cron-Job / Health Check ===
+@app.get("/")
+@app.get("/ping")
+def health_check():
+    return {"status": "active", "message": "Server is alive"}
+
 class AbsentStudent(BaseModel):
     name: str
     permission: bool
