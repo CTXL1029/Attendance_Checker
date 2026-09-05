@@ -219,7 +219,7 @@ async function handleExportClick() {
     modalStatus.textContent = "Lớp đi học đầy đủ!";
 
     document.getElementById("btnShare").onclick = () => {
-      const msg = `[Ngày ${dd}/${mm}]\nLớp trưởng thông báo: Hiện tại lớp đủ\n@All`;
+      const msg = `[Ngày ${dd}/${mm}]\nLớp trưởng thông báo: Hiện tại lớp đủ`;
       if (navigator.share) {
         navigator.share({ text: msg });
       } else {
@@ -266,7 +266,7 @@ async function handleExportClick() {
 
       // Nút Chia sẻ
       document.getElementById("btnShare").onclick = async () => {
-        const shareText = `[Ngày ${dd}/${mm}]\nLớp trưởng thông báo: Hiện tại lớp vắng ${absentList.length} bạn như trong danh sách\n@All`;
+        const shareText = `[Ngày ${dd}/${mm}]\nLớp trưởng thông báo:\nHiện tại lớp vắng ${absentList.length} bạn như trong danh sách`;
         const file = new File([generatedBlob], generatedFileName, {
           type: "image/png",
         });
