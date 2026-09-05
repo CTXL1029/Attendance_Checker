@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
+    />
+    <title>Điểm Danh Học Sinh</title>
+    <link rel="stylesheet" href="style.css" />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div class="container">
+      <!-- Header Selection -->
+      <header class="header">
+        <span class="title-text">Điểm Danh</span>
+        <select id="classSelect" class="class-dropdown">
+          <option value="">Đang tải...</option>
+        </select>
+      </header>
+
+      <!-- Main Table (Danh sách chưa điểm danh) -->
+      <section class="table-section">
+        <table class="attendance-table">
+          <thead>
+            <tr>
+              <th style="width: 25%">Đã đến?</th>
+              <th style="width: 50%">Họ và tên</th>
+              <th style="width: 25%">Nghỉ có phép?</th>
+            </tr>
+          </thead>
+          <tbody id="mainTableBody">
+            <!-- Render bởi JS -->
+          </tbody>
+        </table>
+      </section>
+
+      <!-- Collapsible Section (Danh sách đã điểm danh) -->
+      <section class="collapsible-section">
+        <div class="collapsible-header" id="toggleCollapse">
+          <span>Danh sách đã điểm danh (<span id="checkedCount">0</span>)</span>
+          <span class="arrow-icon" id="arrowIcon">▼</span>
+        </div>
+        <div class="collapsible-content hidden" id="collapsibleContent">
+          <table class="attendance-table">
+            <tbody id="checkedTableBody">
+              <!-- Render bởi JS -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Action Buttons -->
+      <footer class="footer-actions">
+        <button id="btnReset" class="btn btn-reset">Đặt lại bảng</button>
+        <button id="btnExport" class="btn btn-export">Xuất</button>
+      </footer>
+    </div>
+
+    <!-- Modal / Pop-up Xuất -->
+    <div id="exportModal" class="modal-overlay hidden">
+      <div class="modal-card">
+        <h3>Tùy chọn Xuất Điểm Danh</h3>
+        <p id="modalStatusText" class="modal-status">
+          Đang kiểm tra dữ liệu...
+        </p>
+
+        <div class="modal-actions">
+          <button id="btnSaveImage" class="btn btn-secondary">
+            Lưu thành ảnh
+          </button>
+          <button id="btnShare" class="btn btn-primary">Chia sẻ</button>
+        </div>
+        <button id="btnCloseModal" class="btn-close">Hủy</button>
+      </div>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>
