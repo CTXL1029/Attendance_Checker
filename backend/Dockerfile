@@ -1,17 +1,18 @@
 FROM python:3.10-slim
 
-# Cài đặt LibreOffice và font chữ hệ thống
+# Cài đặt LibreOffice và fontconfig
 RUN apt-get update && apt-get install -y \
     libreoffice \
     fonts-dejavu \
-    wget \
     fontconfig \
     && rm -rf /var/lib/apt/lists/*
 
-# Tải và cài đặt Font Mulish từ Google Fonts
-RUN mkdir -p /usr/share/fonts/truetype/mulish \
-    && wget -O /usr/share/fonts/truetype/mulish/Mulish.ttf https://github.com/google/fonts/raw/main/ofl/mulish/Mulish-VariableFont_wght.ttf \
-    && fc-cache -f -v
+# Tạo thư mục và copy TẤT CẢ font từ thư mục fonts/ local vào Docker
+RUN mkdir -p /usr/share/fonts/truetype/mulish
+COPY fonts/ /usr/share/fonts/truetype/mulish/
+
+# Cập nhật cache font của hệ thống
+RUN fc-cache -f -v
 
 WORKDIR /app
 
