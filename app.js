@@ -1,5 +1,5 @@
 // CẤU HÌNH RENDER BACKEND URL
-const BACKEND_URL = "https://your-render-service-name.onrender.com"; // Thay URL Render của bạn vào đây
+const BACKEND_URL = "https://attendance-checker-stk3.onrender.com"; // Thay URL Render của bạn vào đây
 
 // GitHub Repository Info dùng để đọc động thư mục lists/
 const GITHUB_USER = "CTXL1029"; // Thay username GitHub

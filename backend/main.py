@@ -6,10 +6,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 from docx import Document
+from docx.enum.text import WD_ALIGN_PARAGRAPH  # Import module hỗ trợ căn lề
 
 app = FastAPI()
 
-# Bật CORS cho phép GitHub Pages truy cập
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -37,25 +37,48 @@ def process_attendance(data: AttendanceRequest):
 
         doc = Document(template_path)
 
-        # 1. Cập nhật ngày xử lý trong văn bản
+        # 1. Cập nhật ngày xử lý (Giữ căn giữa & Font Mulish)
         for p in doc.paragraphs:
             if "Ngày dd/mm" in p.text:
-                p.text = p.text.replace("Ngày dd/mm", f"Ngày {data.date_str}")
+                p.text = f"Ngày {data.date_str}"
+                p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for run in p.runs:
+                    run.font.name = "Mulish"
 
-        # 2. Điền danh sách vắng vào bảng
+        # 2. Xử lý Bảng điểm danh
         if doc.tables:
             table = doc.tables[0]
-            
-            for index, student in enumerate(data.absent_students, start=1):
-                # Thêm hàng mới nếu số học sinh nhiều hơn hàng mẫu trong docx
-                if index < len(table.rows):
-                    row_cells = table.rows[index].cells
-                else:
-                    row_cells = table.add_row().cells
+            num_absent = len(data.absent_students)
 
-                row_cells[0].text = str(index)
-                row_cells[1].text = student.name
-                row_cells[2].text = "Nghỉ có phép" if student.permission else ""
+            # Xóa các hàng trống thừa còn dư từ file Sample.docx
+            # (Hàng 0 là tiêu đề, các hàng từ index 1 trở đi là dữ liệu)
+            while len(table.rows) - 1 > num_absent:
+                row_to_remove = table.rows[-1]
+                tr = row_to_remove._tr
+                table._tbl.remove(tr)
+
+            # Điền dữ liệu học sinh vắng
+            for index, student in enumerate(data.absent_students, start=1):
+                if index < len(table.rows):
+                    row = table.rows[index]
+                else:
+                    row = table.add_row()
+
+                cell_values = [
+                    str(index),
+                    student.name,
+                    "Nghỉ có phép" if student.permission else ""
+                ]
+
+                # Ghi dữ liệu vào từng ô và ép căn giữa + Font Mulish
+                for col_idx, text_val in enumerate(cell_values):
+                    cell = row.cells[col_idx]
+                    cell.text = ""  # Xóa text mặc định
+                    p = cell.paragraphs[0]
+                    p.alignment = WD_ALIGN_PARAGRAPH.CENTER  # Ép căn giữa ô
+                    
+                    run = p.add_run(text_val)
+                    run.font.name = "Mulish"                  # Ép font Mulish
 
         # Lưu tệp docx tạm thời
         output_docx = f"/tmp/output_{data.date_full}.docx"
@@ -65,16 +88,16 @@ def process_attendance(data: AttendanceRequest):
 
         doc.save(output_docx)
 
-        # 3. Sử dụng LibreOffice chuyển đổi DOCX -> PDF
+        # 3. Chuyển đổi DOCX -> PDF bằng LibreOffice
         subprocess.run([
             "soffice", "--headless", "--convert-to", "pdf",
             output_docx, "--outdir", output_pdf_dir
         ], check=True)
 
-        # 4. Sử dụng PyMuPDF (fitz) chuyển PDF -> PNG
+        # 4. Chuyển đổi PDF -> PNG bằng PyMuPDF
         pdf_doc = fitz.open(output_pdf)
         page = pdf_doc[0]
-        pix = page.get_pixmap(dpi=150)
+        pix = page.get_pixmap(dpi=600)
         pix.save(output_png)
         pdf_doc.close()
 
