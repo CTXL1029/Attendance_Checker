@@ -1,14 +1,15 @@
 // CẤU HÌNH RENDER BACKEND URL
-const BACKEND_URL = "https://attendance-checker-stk3.onrender.com"; // Thay URL Render của bạn vào đây
+const BACKEND_URL = "https://attendance-checker-stk3.onrender.com";
 
 // GitHub Repository Info dùng để đọc động thư mục lists/
-const GITHUB_USER = "CTXL1029"; // Thay username GitHub
-const GITHUB_REPO = "Attendance_Checker"; // Thay tên repo
+const GITHUB_USER = "CTXL1029";
+const GITHUB_REPO = "Attendance_Checker";
 
 let state = {
-  date: "",
+  sessionKey: "", // Lưu khóa theo ca (vd: "2023-10-25-AM") để reset mỗi 12h
+  isAfternoon: false, // Ca học chiều?
   selectedClass: "K60G",
-  classLists: {}, // { 'K60G': [{id, name, checked, permission}], ... }
+  classLists: {},
   collapsibleOpen: false,
 };
 
@@ -22,21 +23,36 @@ document.addEventListener("DOMContentLoaded", async () => {
   render();
 });
 
-// 1. Quản lý Bộ nhớ và Tự động Reset theo ngày
+// 1. Quản lý Bộ nhớ và Tự động Reset lúc 0h sáng và 12h trưa
 function initDateAndStorage() {
-  const today = new Date().toISOString().split("T")[0];
+  const now = new Date();
+  const today = now.toISOString().split("T")[0];
+  const hour = now.getHours();
+
+  // Xác định khoảng thời gian: AM (0h - 11h59) và PM (12h - 23h59)
+  const period = hour < 12 ? "AM" : "PM";
+  const currentSessionKey = `${today}-${period}`;
+
   const savedState = localStorage.getItem("attendance_app_state");
 
   if (savedState) {
     const parsed = JSON.parse(savedState);
-    if (parsed.date === today) {
+    // Chỉ phục hồi data nếu vẫn nằm trong cùng 1 ca của 1 ngày (chưa qua 0h hoặc 12h)
+    if (parsed.sessionKey === currentSessionKey) {
       state = parsed;
       return;
     }
   }
 
-  // Ngày mới hoặc chưa có dữ liệu -> Khởi tạo lại
-  state.date = today;
+  // NẾU LÀ CA MỚI (hoặc lần đầu mở app) -> Khởi tạo lại
+  const dayOfWeek = now.getDay(); // 0: CN, 1: T2, 2: T3, 3: T4...
+
+  // Mặc định Thứ 3 và Thứ 4 là buổi chiều. Các ngày khác xét theo giờ thực tế.
+  let defaultIsAfternoon =
+    dayOfWeek === 2 || dayOfWeek === 3 ? true : hour >= 12;
+
+  state.sessionKey = currentSessionKey;
+  state.isAfternoon = defaultIsAfternoon;
   state.classLists = {};
   saveState();
 }
@@ -48,7 +64,6 @@ function saveState() {
 // 2. Đọc danh sách lớp từ folder /lists
 async function loadClassLists() {
   try {
-    // Gọi GitHub API để lấy các tệp trong folder lists
     const response = await fetch(
       `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/lists`,
     );
@@ -71,9 +86,10 @@ async function loadClassLists() {
       option.textContent = className;
       selectEl.appendChild(option);
 
-      // Nếu chưa có dữ liệu lớp này trong state thì tải nội dung file
       if (!state.classLists[className]) {
-        const fileRes = await fetch(`./lists/${file.name}`);
+        const fileRes = await fetch(
+          `./lists/${file.name}?v=${new Date().getTime()}`,
+        );
         const text = await fileRes.text();
         const names = text
           .split("\n")
@@ -101,8 +117,10 @@ async function loadClassLists() {
 
 // 3. Render Giao diện
 function render() {
-  const list = state.classLists[state.selectedClass] || [];
+  // Sync checkbox UI với state
+  document.getElementById("chkAfternoon").checked = state.isAfternoon;
 
+  const list = state.classLists[state.selectedClass] || [];
   const mainTableBody = document.getElementById("mainTableBody");
   const checkedTableBody = document.getElementById("checkedTableBody");
 
@@ -115,7 +133,6 @@ function render() {
     const tr = document.createElement("tr");
 
     if (!item.checked) {
-      // Hàng ở Bảng chính
       tr.innerHTML = `
         <td><input type="checkbox" onchange="toggleCheck(${index}, true)"></td>
         <td style="text-align: left; padding-left: 12px;">${item.name}</td>
@@ -123,7 +140,6 @@ function render() {
       `;
       mainTableBody.appendChild(tr);
     } else {
-      // Hàng ở Bảng đã điểm danh
       checkedCount++;
       tr.innerHTML = `
         <td><input type="checkbox" checked onchange="toggleCheck(${index}, false)"></td>
@@ -136,7 +152,6 @@ function render() {
 
   document.getElementById("checkedCount").textContent = checkedCount;
 
-  // Collapse state
   const collapsibleContent = document.getElementById("collapsibleContent");
   const arrowIcon = document.getElementById("arrowIcon");
   if (state.collapsibleOpen) {
@@ -167,6 +182,12 @@ function setupEventListeners() {
     render();
   });
 
+  // Lắng nghe thay đổi Buổi chiều
+  document.getElementById("chkAfternoon").addEventListener("change", (e) => {
+    state.isAfternoon = e.target.checked;
+    saveState();
+  });
+
   document.getElementById("toggleCollapse").addEventListener("click", () => {
     state.collapsibleOpen = !state.collapsibleOpen;
     saveState();
@@ -187,7 +208,6 @@ function setupEventListeners() {
     }
   });
 
-  // Xuất & Xử lý Pop-up Modal
   document
     .getElementById("btnExport")
     .addEventListener("click", handleExportClick);
@@ -213,13 +233,17 @@ async function handleExportClick() {
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const yyyy = now.getFullYear();
 
+  // Xác định Title share text dựa trên việc có đang tick "Chiều" hay không
+  const sessionTitle = state.isAfternoon
+    ? `[Chiều Ngày ${dd}/${mm}]`
+    : `[Sáng - Ngày ${dd}/${mm}]`;
+
   if (absentList.length === 0) {
-    // Trường hợp ĐẾN ĐỦ -> Không qua Render xử lý
     btnSaveImage.disabled = true;
     modalStatus.textContent = "Lớp đi học đầy đủ!";
 
     document.getElementById("btnShare").onclick = () => {
-      const msg = `[Ngày ${dd}/${mm}]\nLớp trưởng thông báo: Hiện tại lớp đủ`;
+      const msg = `${sessionTitle}\nLớp trưởng thông báo: Hiện tại lớp đủ`;
       if (navigator.share) {
         navigator.share({ text: msg });
       } else {
@@ -228,7 +252,6 @@ async function handleExportClick() {
       }
     };
   } else {
-    // Trường hợp VẮNG -> Gửi sang Backend Python
     btnSaveImage.disabled = false;
     modalStatus.textContent = "Đang tạo ảnh điểm danh từ máy chủ Backend...";
 
@@ -255,7 +278,6 @@ async function handleExportClick() {
       generatedFileName = `Attendance_Checker_${state.selectedClass}_${dd}-${mm}-${yyyy}.png`;
       modalStatus.textContent = "Đã chuẩn bị xong hình ảnh!";
 
-      // Nút Lưu ảnh
       btnSaveImage.onclick = () => {
         const url = window.URL.createObjectURL(generatedBlob);
         const a = document.createElement("a");
@@ -264,9 +286,8 @@ async function handleExportClick() {
         a.click();
       };
 
-      // Nút Chia sẻ
       document.getElementById("btnShare").onclick = async () => {
-        const shareText = `[Ngày ${dd}/${mm}]\nLớp trưởng thông báo:\nHiện tại lớp vắng ${absentList.length} bạn như trong danh sách`;
+        const shareText = `${sessionTitle}\nLớp trưởng thông báo:\nHiện tại lớp vắng ${absentList.length} bạn như trong danh sách`;
         const file = new File([generatedBlob], generatedFileName, {
           type: "image/png",
         });

@@ -210,3 +210,36 @@ input[type="checkbox"] {
   padding: 8px;
   cursor: pointer;
 }
+
+/* --- Bổ sung CSS cho Header Controls & Checkbox Buổi chiều --- */
+.header {
+  flex-wrap: wrap; /* Cho phép rớt dòng nếu màn hình quá nhỏ */
+}
+
+.header-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.afternoon-toggle {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background-color: #1e1e1e;
+  border: 1px dashed #7e57c2;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  color: #7e57c2;
+  cursor: pointer;
+  user-select: none;
+}
+
+.afternoon-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  accent-color: #7e57c2;
+  margin: 0;
+}

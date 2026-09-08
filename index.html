@@ -17,11 +17,18 @@
   <body>
     <div class="container">
       <!-- Header Selection -->
+      <!-- Cập nhật lại thẻ <header> -->
       <header class="header">
         <span class="title-text">Điểm Danh</span>
-        <select id="classSelect" class="class-dropdown">
-          <option value="">Đang tải...</option>
-        </select>
+        <div class="header-controls">
+          <select id="classSelect" class="class-dropdown">
+            <option value="">Đang tải...</option>
+          </select>
+          <label class="afternoon-toggle" title="Đánh dấu nếu học buổi chiều">
+            <input type="checkbox" id="chkAfternoon" />
+            <span>Chiều</span>
+          </label>
+        </div>
       </header>
 
       <!-- Main Table (Danh sách chưa điểm danh) -->
