@@ -1,13 +1,9 @@
-// CẤU HÌNH RENDER BACKEND URL
-const BACKEND_URL = "https://attendance-checker-stk3.onrender.com";
-
-// GitHub Repository Info dùng để đọc động thư mục lists/
 const GITHUB_USER = "CTXL1029";
 const GITHUB_REPO = "Attendance_Checker";
 
 let state = {
-  sessionKey: "", // Lưu khóa theo ca (vd: "2023-10-25-AM") để reset mỗi 12h
-  isAfternoon: false, // Ca học chiều?
+  sessionKey: "",
+  isAfternoon: false,
   selectedClass: "K60G",
   classLists: {},
   collapsibleOpen: false,
@@ -23,31 +19,23 @@ document.addEventListener("DOMContentLoaded", async () => {
   render();
 });
 
-// 1. Quản lý Bộ nhớ và Tự động Reset lúc 0h sáng và 12h trưa
 function initDateAndStorage() {
   const now = new Date();
   const today = now.toISOString().split("T")[0];
   const hour = now.getHours();
-
-  // Xác định khoảng thời gian: AM (0h - 11h59) và PM (12h - 23h59)
   const period = hour < 12 ? "AM" : "PM";
   const currentSessionKey = `${today}-${period}`;
 
   const savedState = localStorage.getItem("attendance_app_state");
-
   if (savedState) {
     const parsed = JSON.parse(savedState);
-    // Chỉ phục hồi data nếu vẫn nằm trong cùng 1 ca của 1 ngày (chưa qua 0h hoặc 12h)
     if (parsed.sessionKey === currentSessionKey) {
       state = parsed;
       return;
     }
   }
 
-  // NẾU LÀ CA MỚI (hoặc lần đầu mở app) -> Khởi tạo lại
-  const dayOfWeek = now.getDay(); // 0: CN, 1: T2, 2: T3, 3: T4...
-
-  // Mặc định Thứ 3 và Thứ 4 là buổi chiều. Các ngày khác xét theo giờ thực tế.
+  const dayOfWeek = now.getDay();
   let defaultIsAfternoon =
     dayOfWeek === 2 || dayOfWeek === 3 ? true : hour >= 12;
 
@@ -61,77 +49,82 @@ function saveState() {
   localStorage.setItem("attendance_app_state", JSON.stringify(state));
 }
 
-// 2. Đọc danh sách lớp từ folder /lists
 async function loadClassLists() {
+  let masterLists =
+    JSON.parse(localStorage.getItem("master_class_lists")) || {};
+  let txtFiles = [];
+
   try {
     const response = await fetch(
       `https://api.github.com/repos/${GITHUB_USER}/${GITHUB_REPO}/contents/lists`,
     );
+    if (!response.ok) throw new Error("Mất kết nối mạng");
     const files = await response.json();
+    txtFiles = files.filter((f) => f.name.endsWith(".txt"));
+  } catch (err) {
+    console.warn("Đang chạy Offline. Dùng danh sách từ bộ nhớ đệm.");
+    txtFiles = Object.keys(masterLists).map((name) => ({
+      name: `${name}.txt`,
+    }));
+  }
 
-    const txtFiles = Array.isArray(files)
-      ? files.filter((f) => f.name.endsWith(".txt"))
-      : [
-          { name: "K60G.txt", path: "lists/K60G.txt" },
-          { name: "Toán-Chiều.txt", path: "lists/Toán-Chiều.txt" },
-        ];
+  const selectEl = document.getElementById("classSelect");
+  selectEl.innerHTML = "";
 
-    const selectEl = document.getElementById("classSelect");
-    selectEl.innerHTML = "";
+  for (const file of txtFiles) {
+    const className = file.name.replace(".txt", "");
+    const option = document.createElement("option");
+    option.value = className;
+    option.textContent = className;
+    selectEl.appendChild(option);
 
-    for (const file of txtFiles) {
-      const className = file.name.replace(".txt", "");
-      const option = document.createElement("option");
-      option.value = className;
-      option.textContent = className;
-      selectEl.appendChild(option);
+    try {
+      const fileRes = await fetch(
+        `./lists/${file.name}?v=${new Date().getTime()}`,
+      );
+      if (!fileRes.ok) throw new Error("Không tải được file");
+      const text = await fileRes.text();
+      const names = text
+        .split("\n")
+        .map((n) => n.trim())
+        .filter((n) => n.length > 0);
+      masterLists[className] = names;
+    } catch (err) {}
 
-      if (!state.classLists[className]) {
-        const fileRes = await fetch(
-          `./lists/${file.name}?v=${new Date().getTime()}`,
-        );
-        const text = await fileRes.text();
-        const names = text
-          .split("\n")
-          .map((n) => n.trim())
-          .filter((n) => n.length > 0);
-
-        state.classLists[className] = names.map((name, index) => ({
+    if (!state.classLists[className] && masterLists[className]) {
+      state.classLists[className] = masterLists[className].map(
+        (name, index) => ({
           id: index + 1,
           name: name,
           checked: false,
           permission: false,
-        }));
-      }
+        }),
+      );
     }
-
-    if (!state.selectedClass || !state.classLists[state.selectedClass]) {
-      state.selectedClass = "K60G";
-    }
-    selectEl.value = state.selectedClass;
-    saveState();
-  } catch (err) {
-    console.error("Lỗi tải danh sách lớp:", err);
   }
+
+  localStorage.setItem("master_class_lists", JSON.stringify(masterLists));
+
+  if (!state.selectedClass || !state.classLists[state.selectedClass]) {
+    state.selectedClass =
+      selectEl.options.length > 0 ? selectEl.options[0].value : "K60G";
+  }
+  selectEl.value = state.selectedClass;
+  saveState();
 }
 
-// 3. Render Giao diện
 function render() {
-  // Sync checkbox UI với state
   document.getElementById("chkAfternoon").checked = state.isAfternoon;
-
   const list = state.classLists[state.selectedClass] || [];
   const mainTableBody = document.getElementById("mainTableBody");
   const checkedTableBody = document.getElementById("checkedTableBody");
 
   mainTableBody.innerHTML = "";
   checkedTableBody.innerHTML = "";
-
   let checkedCount = 0;
 
   list.forEach((item, index) => {
     const tr = document.createElement("tr");
-
     if (!item.checked) {
       tr.innerHTML = `
         <td><input type="checkbox" onchange="toggleCheck(${index}, true)"></td>
@@ -151,7 +144,6 @@ function render() {
   });
 
   document.getElementById("checkedCount").textContent = checkedCount;
-
   const collapsibleContent = document.getElementById("collapsibleContent");
   const arrowIcon = document.getElementById("arrowIcon");
   if (state.collapsibleOpen) {
@@ -163,13 +155,11 @@ function render() {
   }
 }
 
-// Global Handlers cho DOM Events
 window.toggleCheck = (index, status) => {
   state.classLists[state.selectedClass][index].checked = status;
   saveState();
   render();
 };
-
 window.togglePermission = (index, status) => {
   state.classLists[state.selectedClass][index].permission = status;
   saveState();
@@ -181,33 +171,27 @@ function setupEventListeners() {
     saveState();
     render();
   });
-
-  // Lắng nghe thay đổi Buổi chiều
   document.getElementById("chkAfternoon").addEventListener("change", (e) => {
     state.isAfternoon = e.target.checked;
     saveState();
   });
-
   document.getElementById("toggleCollapse").addEventListener("click", () => {
     state.collapsibleOpen = !state.collapsibleOpen;
     saveState();
     render();
   });
-
   document.getElementById("btnReset").addEventListener("click", () => {
     if (confirm("Bạn có chắc chắn muốn đặt lại bảng điểm danh lớp này?")) {
       const list = state.classLists[state.selectedClass];
-      if (list) {
+      if (list)
         list.forEach((item) => {
           item.checked = false;
           item.permission = false;
         });
-      }
       saveState();
       render();
     }
   });
-
   document
     .getElementById("btnExport")
     .addEventListener("click", handleExportClick);
@@ -216,11 +200,9 @@ function setupEventListeners() {
   });
 }
 
-// 4. Logic Xử lý Xuất / Render Backend
 async function handleExportClick() {
   const list = state.classLists[state.selectedClass] || [];
   const absentList = list.filter((item) => !item.checked);
-
   const modal = document.getElementById("exportModal");
   const btnSaveImage = document.getElementById("btnSaveImage");
   const modalStatus = document.getElementById("modalStatusText");
@@ -232,8 +214,6 @@ async function handleExportClick() {
   const dd = String(now.getDate()).padStart(2, "0");
   const mm = String(now.getMonth() + 1).padStart(2, "0");
   const yyyy = now.getFullYear();
-
-  // Xác định Title share text dựa trên việc có đang tick "Chiều" hay không
   const sessionTitle = state.isAfternoon
     ? `[Chiều Ngày ${dd}/${mm}]`
     : `[Sáng - Ngày ${dd}/${mm}]`;
@@ -241,72 +221,74 @@ async function handleExportClick() {
   if (absentList.length === 0) {
     btnSaveImage.disabled = true;
     modalStatus.textContent = "Lớp đi học đầy đủ!";
-
     document.getElementById("btnShare").onclick = () => {
       const msg = `${sessionTitle}\nLớp trưởng thông báo: Hiện tại lớp đủ`;
-      if (navigator.share) {
-        navigator.share({ text: msg });
-      } else {
+      if (navigator.share) navigator.share({ text: msg });
+      else {
         navigator.clipboard.writeText(msg);
         alert("Đã sao chép tin nhắn vào bộ nhớ tạm!");
       }
     };
   } else {
     btnSaveImage.disabled = false;
-    modalStatus.textContent = "Đang tạo ảnh điểm danh từ máy chủ Backend...";
+    modalStatus.textContent = "Đang xử lý ảnh trên máy của bạn...";
 
-    const payload = {
-      class_name: state.selectedClass,
-      date_str: `${dd}/${mm}`,
-      date_full: `${dd}-${mm}-${yyyy}`,
-      absent_students: absentList.map((a) => ({
-        name: a.name,
-        permission: a.permission,
-      })),
-    };
+    document.getElementById("templateDate").textContent = `Ngày ${dd}/${mm}`;
+    const tbody = document.getElementById("templateTableBody");
+    tbody.innerHTML = "";
+
+    absentList.forEach((student, idx) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${idx + 1}</td>
+        <td style="text-align: left; padding-left: 20px; font-weight: 600;">${student.name}</td>
+        <td>${student.permission ? "Nghỉ có phép" : ""}</td>
+      `;
+      tbody.appendChild(tr);
+    });
 
     try {
-      const response = await fetch(`${BACKEND_URL}/api/process-attendance`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+      const templateEl = document.getElementById("exportTemplate");
+      const canvas = await html2canvas(templateEl, {
+        scale: 6,
+        backgroundColor: "#ffffff",
+        logging: false,
+        useCORS: true, // Giúp tải font chữ mượt hơn, không bị lỗi nét
       });
 
-      if (!response.ok) throw new Error("Lỗi khi kết nối Backend");
+      canvas.toBlob(async (blob) => {
+        generatedBlob = blob;
+        generatedFileName = `Attendance_Checker_${state.selectedClass}_${dd}-${mm}-${yyyy}.png`;
+        modalStatus.textContent = "Đã xuất xong hình ảnh!";
 
-      generatedBlob = await response.blob();
-      generatedFileName = `Attendance_Checker_${state.selectedClass}_${dd}-${mm}-${yyyy}.png`;
-      modalStatus.textContent = "Đã chuẩn bị xong hình ảnh!";
+        btnSaveImage.onclick = () => {
+          const url = window.URL.createObjectURL(generatedBlob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = generatedFileName;
+          a.click();
+        };
 
-      btnSaveImage.onclick = () => {
-        const url = window.URL.createObjectURL(generatedBlob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = generatedFileName;
-        a.click();
-      };
-
-      document.getElementById("btnShare").onclick = async () => {
-        const shareText = `${sessionTitle}\nLớp trưởng thông báo:\nHiện tại lớp vắng ${absentList.length} bạn như trong danh sách`;
-        const file = new File([generatedBlob], generatedFileName, {
-          type: "image/png",
-        });
-
-        if (navigator.canShare && navigator.canShare({ files: [file] })) {
-          await navigator.share({
-            files: [file],
-            text: shareText,
+        document.getElementById("btnShare").onclick = async () => {
+          const shareText = `${sessionTitle}\nLớp trưởng thông báo:\nHiện tại lớp vắng ${absentList.length} bạn như trong danh sách`;
+          const file = new File([generatedBlob], generatedFileName, {
+            type: "image/png",
           });
-        } else if (navigator.share) {
-          await navigator.share({ text: shareText });
-        } else {
-          navigator.clipboard.writeText(shareText);
-          alert("Đã sao chép tin nhắn!");
-        }
-      };
+          if (navigator.canShare && navigator.canShare({ files: [file] })) {
+            await navigator.share({ files: [file], text: shareText });
+          } else if (navigator.share) {
+            await navigator.share({ text: shareText });
+          } else {
+            navigator.clipboard.writeText(shareText);
+            alert(
+              "Trình duyệt không hỗ trợ Share Ảnh. Đã sao chép nội dung văn bản!",
+            );
+          }
+        };
+      }, "image/png");
     } catch (err) {
       console.error(err);
-      modalStatus.textContent = "Không thể kết nối đến server Render!";
+      modalStatus.textContent = "Có lỗi xảy ra khi tạo ảnh!";
     }
   }
 }

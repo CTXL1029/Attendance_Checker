@@ -6,8 +6,20 @@
       name="viewport"
       content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no"
     />
+
+    <link rel="manifest" href="manifest.json" />
+    <meta name="theme-color" content="#121212" />
+
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <link rel="apple-touch-icon" href="favicon.webp" />
+
     <link rel="icon" type="image/webp" href="favicon.webp" />
     <title>Điểm Danh Học Sinh</title>
+
     <link rel="stylesheet" href="style.css" />
     <link
       href="https://fonts.googleapis.com/css2?family=Mulish:wght@400;600;700&display=swap"
@@ -16,8 +28,6 @@
   </head>
   <body>
     <div class="container">
-      <!-- Header Selection -->
-      <!-- Cập nhật lại thẻ <header> -->
       <header class="header">
         <span class="title-text">Điểm Danh</span>
         <div class="header-controls">
@@ -31,23 +41,20 @@
         </div>
       </header>
 
-      <!-- Main Table (Danh sách chưa điểm danh) -->
       <section class="table-section">
         <table class="attendance-table">
           <thead>
             <tr>
               <th style="width: 25%">Đã đến?</th>
               <th style="width: 50%">Họ và tên</th>
-              <th style="width: 25%">Nghỉ có phép?</th>
+              <th style="width: 25%">Nghỉ phép?</th>
             </tr>
           </thead>
           <tbody id="mainTableBody">
-            <!-- Render bởi JS -->
           </tbody>
         </table>
       </section>
 
-      <!-- Collapsible Section (Danh sách đã điểm danh) -->
       <section class="collapsible-section">
         <div class="collapsible-header" id="toggleCollapse">
           <span>Danh sách đã điểm danh (<span id="checkedCount">0</span>)</span>
@@ -56,20 +63,17 @@
         <div class="collapsible-content hidden" id="collapsibleContent">
           <table class="attendance-table">
             <tbody id="checkedTableBody">
-              <!-- Render bởi JS -->
             </tbody>
           </table>
         </div>
       </section>
 
-      <!-- Action Buttons -->
       <footer class="footer-actions">
         <button id="btnReset" class="btn btn-reset">Đặt lại bảng</button>
         <button id="btnExport" class="btn btn-export">Xuất</button>
       </footer>
     </div>
 
-    <!-- Modal / Pop-up Xuất -->
     <div id="exportModal" class="modal-overlay hidden">
       <div class="modal-card">
         <h3>Xuất Bảng Điểm Danh</h3>
@@ -87,6 +91,45 @@
       </div>
     </div>
 
+    <div class="export-template-container">
+      <div id="exportTemplate" class="export-template">
+        <h2 class="template-title">Danh Sách Các Bạn Vắng Mặt</h2>
+        <h3 class="template-date" id="templateDate">Ngày dd/mm</h3>
+        <table class="template-table">
+          <thead>
+            <tr>
+              <th style="width: 15%">STT</th>
+              <th style="width: 55%">Họ và tên</th>
+              <th style="width: 30%">Ghi chú</th>
+            </tr>
+          </thead>
+          <tbody id="templateTableBody">
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
     <script src="app.js"></script>
+
+    <script>
+      if ("serviceWorker" in navigator) {
+        window.addEventListener("load", () => {
+          navigator.serviceWorker
+            .register("./sw.js")
+            .then((registration) => {
+              console.log(
+                "App đã sẵn sàng chạy Offline! Scope:",
+                registration.scope,
+              );
+            })
+            .catch((error) => {
+              console.error("Đăng ký Service Worker thất bại:", error);
+            });
+        });
+      }
+    </script>
   </body>
 </html>

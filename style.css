@@ -28,7 +28,6 @@ body {
   padding-bottom: 20px;
 }
 
-/* Header Dropdown */
 .header {
   display: flex;
   align-items: center;
@@ -53,7 +52,6 @@ body {
   outline: none;
 }
 
-/* Tables */
 .attendance-table {
   width: 100%;
   border-collapse: collapse;
@@ -76,7 +74,6 @@ body {
   font-weight: 600;
 }
 
-/* Custom Checkbox */
 input[type="checkbox"] {
   width: 22px;
   height: 22px;
@@ -84,7 +81,6 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 
-/* Collapsible */
 .collapsible-section {
   border: 1px dashed #444;
   border-radius: 8px;
@@ -111,7 +107,6 @@ input[type="checkbox"] {
   display: none;
 }
 
-/* Buttons */
 .footer-actions {
   display: flex;
   justify-content: space-between;
@@ -150,7 +145,6 @@ input[type="checkbox"] {
   cursor: not-allowed;
 }
 
-/* Modal */
 .modal-overlay {
   position: fixed;
   top: 0;
@@ -211,9 +205,8 @@ input[type="checkbox"] {
   cursor: pointer;
 }
 
-/* --- Bổ sung CSS cho Header Controls & Checkbox Buổi chiều --- */
 .header {
-  flex-wrap: wrap; /* Cho phép rớt dòng nếu màn hình quá nhỏ */
+  flex-wrap: wrap;
 }
 
 .header-controls {
@@ -242,4 +235,51 @@ input[type="checkbox"] {
   height: 18px;
   accent-color: #7e57c2;
   margin: 0;
+}
+
+.export-template-container {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+}
+
+.export-template {
+  width: 794px;
+  background-color: #ffffff;
+  color: #000000;
+  padding: 60px 40px;
+  font-family: "Mulish", sans-serif;
+  box-sizing: border-box;
+}
+
+.template-title {
+  text-align: center;
+  font-size: 28px;
+  font-weight: 700;
+  margin-bottom: 8px;
+}
+
+.template-date {
+  text-align: center;
+  font-size: 18px;
+  font-weight: 400;
+  margin-bottom: 30px;
+}
+
+.template-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.template-table th,
+.template-table td {
+  border: 1px solid #000;
+  padding: 12px;
+  text-align: center;
+  font-size: 18px;
+}
+
+.template-table th {
+  font-weight: 700;
+  background-color: #f0f0f0;
 }
