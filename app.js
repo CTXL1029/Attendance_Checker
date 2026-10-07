@@ -17,11 +17,35 @@ document.addEventListener("DOMContentLoaded", async () => {
   await loadClassLists();
   setupEventListeners();
   render();
+
+  // Tự động kiểm tra và cập nhật ca khi người dùng mở lại tab (hữu ích cho PWA)
+  document.addEventListener("visibilitychange", async () => {
+    if (document.visibilityState === "visible") {
+      if (initDateAndStorage()) {
+        await loadClassLists();
+        render();
+      }
+    }
+  });
+
+  // Kiểm tra định kỳ mỗi phút phòng khi người dùng treo máy và vượt qua 12h trưa
+  setInterval(async () => {
+    if (initDateAndStorage()) {
+      await loadClassLists();
+      render();
+    }
+  }, 60000);
 });
 
 function initDateAndStorage() {
   const now = new Date();
-  const today = now.toISOString().split("T")[0];
+
+  // Đã sửa lỗi: Lấy ngày theo giờ địa phương thay vì toISOString() để tránh lệch múi giờ
+  const year = now.getFullYear();
+  const month = String(now.getMonth() + 1).padStart(2, "0");
+  const date = String(now.getDate()).padStart(2, "0");
+  const today = `${year}-${month}-${date}`;
+
   const hour = now.getHours();
   const period = hour < 12 ? "AM" : "PM";
   const currentSessionKey = `${today}-${period}`;
@@ -31,18 +55,22 @@ function initDateAndStorage() {
     const parsed = JSON.parse(savedState);
     if (parsed.sessionKey === currentSessionKey) {
       state = parsed;
-      return;
+      return false; // Trạng thái vẫn là ca hiện tại (sáng hoặc chiều)
     }
+    // Giữ lại tên lớp đang chọn khi ứng dụng tự động chuyển sang ca mới
+    if (parsed.selectedClass) state.selectedClass = parsed.selectedClass;
+    if (parsed.collapsibleOpen !== undefined)
+      state.collapsibleOpen = parsed.collapsibleOpen;
   }
 
-  const dayOfWeek = now.getDay();
-  let defaultIsAfternoon =
-    dayOfWeek === 2 || dayOfWeek === 3 ? true : hour >= 12;
+  // Đã sửa lỗi: Xoá bỏ ngoại lệ thứ 3, thứ 4. Bây giờ cứ đúng >= 12h thì mới mặc định tick chiều.
+  let defaultIsAfternoon = hour >= 12;
 
   state.sessionKey = currentSessionKey;
   state.isAfternoon = defaultIsAfternoon;
   state.classLists = {};
   saveState();
+  return true; // Báo hiệu đã sang ca mới để reset list
 }
 
 function saveState() {
@@ -253,7 +281,7 @@ async function handleExportClick() {
         scale: 6,
         backgroundColor: "#ffffff",
         logging: false,
-        useCORS: true, // Giúp tải font chữ mượt hơn, không bị lỗi nét
+        useCORS: true,
       });
 
       canvas.toBlob(async (blob) => {
